@@ -1,3 +1,5 @@
+#![feature(portable_simd)]
+
 pub mod iapws97 {
 
     mod constants;
