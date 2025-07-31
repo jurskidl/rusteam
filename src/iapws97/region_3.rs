@@ -2024,7 +2024,7 @@ fn phi_delta_tau_3(rho: f64, t: f64) -> f64 {
 /// Temperature is assumed to be in K
 /// density is assumed to be in kg/m^3
 #[allow(dead_code)]
-#[inline(always)]
+#[inline]
 fn p_rho_t_3(rho: f64, t: f64) -> f64 {
     rho * (constants::_R * 1000.0) * t * delta_3(rho) * phi_delta_3(rho, t)
 }
@@ -2032,7 +2032,7 @@ fn p_rho_t_3(rho: f64, t: f64) -> f64 {
 /// Returns the internal energy given t and rho
 /// Temperature is assumed to be in K
 /// density is assumed to be in kg/m^3
-#[inline(always)]
+#[inline]
 fn u_rho_t_3(rho: f64, t: f64) -> f64 {
     tau_3(t) * phi_tau_3(rho, t) * constants::_R * t
 }
@@ -2040,7 +2040,7 @@ fn u_rho_t_3(rho: f64, t: f64) -> f64 {
 /// Returns the entropy given t and rho
 /// Temperature is assumed to be in K
 /// density is assumed to be in kg/m^3
-#[inline(always)]
+#[inline]
 fn s_rho_t_3(rho: f64, t: f64) -> f64 {
     (tau_3(t) * phi_tau_3(rho, t) - phi_3(rho, t)) * constants::_R
 }
@@ -2048,7 +2048,7 @@ fn s_rho_t_3(rho: f64, t: f64) -> f64 {
 /// Returns the enthalpy given t and rho
 /// Temperature is assumed to be in K
 /// density is assumed to be in kg/m^3
-#[inline(always)]
+#[inline]
 fn h_rho_t_3(rho: f64, t: f64) -> f64 {
     (tau_3(t) * phi_tau_3(rho, t) + delta_3(rho) * phi_delta_3(rho, t)) * constants::_R * t
 }
@@ -2056,7 +2056,7 @@ fn h_rho_t_3(rho: f64, t: f64) -> f64 {
 /// Returns the isochoric specific heat given t and rho
 /// Temperature is assumed to be in K
 /// density is assumed to be in kg/m^3
-#[inline(always)]
+#[inline]
 fn cv_rho_t_3(rho: f64, t: f64) -> f64 {
     -tau_3(t).powi(2) * phi_tau_tau_3(rho, t) * constants::_R
 }

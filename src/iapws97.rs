@@ -1,7 +1,6 @@
 #![feature(portable_simd)]
 
 pub mod iapws97 {
-
     mod constants;
     mod region_1;
     mod region_2;

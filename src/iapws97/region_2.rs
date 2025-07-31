@@ -1,5 +1,62 @@
 // Region 2
 use crate::iapws97::constants;
+use std::simd::prelude::*;
+
+const REGION_2_COEFFS_II_RES: [i32; 43] = [
+    1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 5, 6, 6, 6, 7, 7, 7, 8, 8, 9, 10, 10, 10,
+    16, 16, 18, 20, 20, 20, 21, 22, 23, 24, 24, 24,
+];
+
+const REGION_2_COEFFS_JI_RES: [i32; 43] = [
+    0, 1, 2, 3, 6, 1, 2, 4, 7, 36, 0, 1, 3, 6, 35, 1, 2, 3, 7, 3, 16, 35, 0, 11, 25, 8, 36, 13, 4,
+    10, 14, 29, 50, 57, 20, 35, 48, 21, 53, 39, 26, 40, 58,
+];
+
+const REGION_2_COEFFS_NI_RES: [f64; 43] = [
+    -0.0017731742473213,
+    -0.017834862292358,
+    -0.045996013696365,
+    -0.057581259083432,
+    -0.05032527872793,
+    -0.000033032641670203,
+    -0.00018948987516315,
+    -0.0039392777243355,
+    -0.043797295650573,
+    -0.000026674547914087,
+    2.0481737692309E-08,
+    4.3870667284435E-07,
+    -0.00003227767723857,
+    -0.0015033924542148,
+    -0.040668253562649,
+    -7.8847309559367E-10,
+    1.2790717852285E-08,
+    4.8225372718507E-07,
+    2.2922076337661E-06,
+    -1.6714766451061E-11,
+    -0.0021171472321355,
+    -23.895741934104,
+    -5.905956432427E-18,
+    -1.2621808899101E-06,
+    -0.038946842435739,
+    1.1256211360459E-11,
+    -8.2311340897998,
+    1.9809712802088E-08,
+    1.0406965210174E-19,
+    -1.0234747095929E-13,
+    -1.0018179379511E-09,
+    -8.0882908646985E-11,
+    0.10693031879409,
+    -0.33662250574171,
+    8.9185845355421E-25,
+    3.0629316876232E-13,
+    -4.2002467698208E-06,
+    -5.9056029685639E-26,
+    3.7826947613457E-06,
+    -1.2768608934681E-15,
+    7.3087610595061E-29,
+    5.5414715350778E-17,
+    -9.436970724121E-07,
+];
 
 const REGION_2_COEFFS_RES: [[f64; 3]; 43] = [
     [1.0, 0.0, -0.0017731742473213],
@@ -47,6 +104,20 @@ const REGION_2_COEFFS_RES: [[f64; 3]; 43] = [
     [24.0, 58.0, -9.436970724121E-07],
 ];
 
+const REGION_2_COEFFS_JI_IDEAL: [i32; 9] = [0, 1, -5, -4, -3, -2, -1, 2, 3];
+
+const REGION_2_COEFFS_NI_IDEAL: [f64; 9] = [
+    -0.96927686500217e1,
+    0.10086655968018e2,
+    -0.56087911283020e-2,
+    0.71452738081455e-1,
+    -0.40710498223928,
+    0.14240819171444e1,
+    -0.43839511319450e1,
+    -0.28408632460772,
+    0.21268463753307e-1,
+];
+
 const REGION_2_COEFFS_IDEAL: [[f64; 2]; 9] = [
     [0.0, -0.96927686500217e1],
     [1.0, 0.10086655968018e2],
@@ -64,6 +135,7 @@ const REGION_2_COEFFS_IDEAL: [[f64; 2]; 9] = [
 /// Returns the region-2 tau
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
+#[inline(always)]
 fn tau_2(t: f64) -> f64 {
     540.0 / t
 }
@@ -71,6 +143,7 @@ fn tau_2(t: f64) -> f64 {
 /// Returns the region-2 pi
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
+#[inline(always)]
 fn pi_2(p: f64) -> f64 {
     p / 1e6
 }
@@ -79,64 +152,58 @@ fn pi_2(p: f64) -> f64 {
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
 fn gamma_2_ideal(t: f64, p: f64) -> f64 {
-    let pi = pi_2(p);
-    let mut sum: f64 = 0.0;
     let tau = tau_2(t);
-    for coefficient in REGION_2_COEFFS_IDEAL {
-        let ji = coefficient[0];
-        let ni = coefficient[1];
-        sum += ni * tau.powf(ji);
-    }
-    pi.ln() + sum
+    let pi = pi_2(p);
+    let tau: [f64; 9] = std::array::from_fn(|x| tau.powi(REGION_2_COEFFS_JI_IDEAL[x]));
+    let ni = Simd::<f64, 16>::load_or_default(&REGION_2_COEFFS_NI_IDEAL);
+    let tau = Simd::<f64, 16>::load_or_default(&tau);
+    (ni * tau).reduce_sum() + pi.ln()
 }
 
 /// Returns the region-2 residual gamma
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
 fn gamma_2_res(t: f64, p: f64) -> f64 {
-    let pi = pi_2(p);
-    let mut sum: f64 = 0.0;
     let tau = tau_2(t);
-    for coefficient in REGION_2_COEFFS_RES {
-        let ii = coefficient[0] as i32;
-        let ji = coefficient[1] as i32;
-        let ni = coefficient[2];
-        sum += ni * pi.powi(ii) * (tau - 0.5).powi(ji);
-    }
-    sum
+    let pi = pi_2(p);
+    let (pi, tau): ([f64; 43], [f64; 43]) = (
+        std::array::from_fn(|x| (tau - 0.5).powi(REGION_2_COEFFS_JI_RES[x])),
+        std::array::from_fn(|x| pi.powi(REGION_2_COEFFS_II_RES[x])),
+    );
+    let ni = Simd::<f64, 64>::load_or_default(&REGION_2_COEFFS_NI_RES);
+    let tau = Simd::<f64, 64>::load_or_default(&tau);
+    let pi = Simd::<f64, 64>::load_or_default(&pi);
+    (ni * tau * pi).reduce_sum()
 }
 
 /// Returns the region-2 ideal gamma_tau
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
 fn gamma_tau_2_ideal(t: f64, _: f64) -> f64 {
-    let mut sum: f64 = 0.0;
     let tau = tau_2(t);
-    for coefficient in REGION_2_COEFFS_IDEAL {
-        let ji = coefficient[0];
-        let ni = coefficient[1];
-        sum += ni * ji * tau.powf(ji - 1.0);
-    }
-    sum
+    let tau: [f64; 9] = std::array::from_fn(|x| tau.powi(REGION_2_COEFFS_JI_IDEAL[x] - 1));
+    let ji = Simd::<i32, 16>::load_or_default(&REGION_2_COEFFS_JI_IDEAL).cast::<f64>();
+    let ni = Simd::<f64, 16>::load_or_default(&REGION_2_COEFFS_NI_IDEAL);
+    let tau = Simd::<f64, 16>::load_or_default(&tau);
+    (ni * ji * tau).reduce_sum()
 }
 
 /// Returns the region-2 ideal gamma_tau_tau
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
 fn gamma_tau_tau_2_ideal(t: f64, _: f64) -> f64 {
-    let mut sum: f64 = 0.0;
     let tau = tau_2(t);
-    for coefficient in REGION_2_COEFFS_IDEAL {
-        let ji = coefficient[0];
-        let ni = coefficient[1];
-        sum += ni * ji * (ji - 1.0) * tau.powf(ji - 2.0);
-    }
-    sum
+    let tau: [f64; 9] = std::array::from_fn(|x| tau.powi(REGION_2_COEFFS_JI_IDEAL[x] - 2));
+    let ji = Simd::<i32, 16>::load_or_default(&REGION_2_COEFFS_JI_IDEAL).cast::<f64>();
+    let ni = Simd::<f64, 16>::load_or_default(&REGION_2_COEFFS_NI_IDEAL);
+    let tau = Simd::<f64, 16>::load_or_default(&tau);
+    (ni * ji * (ji - f64x16::splat(1.0)) * tau).reduce_sum()
 }
 
 /// Returns the region-2 ideal gamma_pi
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
+#[inline(always)]
 fn gamma_pi_2_ideal(_: f64, p: f64) -> f64 {
     1.0 / pi_2(p)
 }
@@ -145,85 +212,92 @@ fn gamma_pi_2_ideal(_: f64, p: f64) -> f64 {
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
 fn gamma_tau_2_res(t: f64, p: f64) -> f64 {
-    let mut sum: f64 = 0.0;
     let tau = tau_2(t);
     let pi = pi_2(p);
-    for coefficient in REGION_2_COEFFS_RES {
-        let ii = coefficient[0] as i32;
-        let ji = coefficient[1] as i32;
-        let ni = coefficient[2];
-        sum += ni * pi.powi(ii) * f64::from(ji) * (tau - 0.5).powi(ji - 1);
-    }
-    sum
+    let (tau, pi): ([f64; 43], [f64; 43]) = (
+        std::array::from_fn(|x| (tau - 0.5).powi(REGION_2_COEFFS_JI_RES[x] - 1)),
+        std::array::from_fn(|x| pi.powi(REGION_2_COEFFS_II_RES[x])),
+    );
+    let ji = Simd::<i32, 64>::load_or_default(&REGION_2_COEFFS_JI_RES).cast::<f64>();
+    let ni = Simd::<f64, 64>::load_or_default(&REGION_2_COEFFS_NI_RES);
+    let tau = Simd::<f64, 64>::load_or_default(&tau);
+    let pi = Simd::<f64, 64>::load_or_default(&pi);
+    (ni * ji * tau * pi).reduce_sum()
 }
 
 /// Returns the region-2 residual gamma_tau_tau
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
 fn gamma_tau_tau_2_res(t: f64, p: f64) -> f64 {
-    let mut sum: f64 = 0.0;
     let tau = tau_2(t);
     let pi = pi_2(p);
-    for coefficient in REGION_2_COEFFS_RES {
-        let ii = coefficient[0] as i32;
-        let ji = coefficient[1] as i32;
-        let ni = coefficient[2];
-        sum += ni * pi.powi(ii) * f64::from(ji * (ji - 1)) * (tau - 0.5).powi(ji - 2);
-    }
-    sum
+    let (tau, pi): ([f64; 43], [f64; 43]) = (
+        std::array::from_fn(|x| (tau - 0.5).powi(REGION_2_COEFFS_JI_RES[x] - 2)),
+        std::array::from_fn(|x| pi.powi(REGION_2_COEFFS_II_RES[x])),
+    );
+    let ji = Simd::<i32, 64>::load_or_default(&REGION_2_COEFFS_JI_RES).cast::<f64>();
+    let ni = Simd::<f64, 64>::load_or_default(&REGION_2_COEFFS_NI_RES);
+    let tau = Simd::<f64, 64>::load_or_default(&tau);
+    let pi = Simd::<f64, 64>::load_or_default(&pi);
+    (ni * ji * (ji - f64x64::splat(1.0)) * tau * pi).reduce_sum()
 }
 
 /// Returns the region-2 residual gamma_pi
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
 fn gamma_pi_2_res(t: f64, p: f64) -> f64 {
-    let mut sum: f64 = 0.0;
     let tau = tau_2(t);
     let pi = pi_2(p);
-    for coefficient in REGION_2_COEFFS_RES {
-        let ii = coefficient[0] as i32;
-        let ji = coefficient[1] as i32;
-        let ni = coefficient[2];
-        sum += ni * pi.powi(ii - 1) * f64::from(ii) * (tau - 0.5).powi(ji);
-    }
-    sum
+    let (tau, pi): ([f64; 43], [f64; 43]) = (
+        std::array::from_fn(|x| (tau - 0.5).powi(REGION_2_COEFFS_JI_RES[x])),
+        std::array::from_fn(|x| pi.powi(REGION_2_COEFFS_II_RES[x] - 1)),
+    );
+    let ii = Simd::<i32, 64>::load_or_default(&REGION_2_COEFFS_II_RES).cast::<f64>();
+    let ni = Simd::<f64, 64>::load_or_default(&REGION_2_COEFFS_NI_RES);
+    let tau = Simd::<f64, 64>::load_or_default(&tau);
+    let pi = Simd::<f64, 64>::load_or_default(&pi);
+    (ni * ii * tau * pi).reduce_sum()
 }
 
 /// Returns the region-2 residual gamma_pi_pi
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
 fn gamma_pi_pi_2_res(t: f64, p: f64) -> f64 {
-    let mut sum: f64 = 0.0;
     let tau = tau_2(t);
     let pi = pi_2(p);
-    for coefficient in REGION_2_COEFFS_RES {
-        let ii = coefficient[0] as i32;
-        let ji = coefficient[1] as i32;
-        let ni = coefficient[2];
-        sum += ni * pi.powi(ii - 2) * f64::from(ii * (ii - 1)) * (tau - 0.5).powi(ji);
-    }
-    sum
+    let (tau, pi): ([f64; 43], [f64; 43]) = (
+        std::array::from_fn(|x| (tau - 0.5).powi(REGION_2_COEFFS_JI_RES[x])),
+        std::array::from_fn(|x| pi.powi(REGION_2_COEFFS_II_RES[x] - 2)),
+    );
+    let ii = Simd::<i32, 64>::load_or_default(&REGION_2_COEFFS_II_RES).cast::<f64>();
+    let ni = Simd::<f64, 64>::load_or_default(&REGION_2_COEFFS_NI_RES);
+    let tau = Simd::<f64, 64>::load_or_default(&tau);
+    let pi = Simd::<f64, 64>::load_or_default(&pi);
+    (ni * ii * (ii - f64x64::splat(1.0)) * tau * pi).reduce_sum()
 }
 
 /// Returns the region-2 residual gamma_pi_tau
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
 fn gamma_pi_tau_2_res(t: f64, p: f64) -> f64 {
-    let mut sum: f64 = 0.0;
     let tau = tau_2(t);
     let pi = pi_2(p);
-    for coefficient in REGION_2_COEFFS_RES {
-        let ii = coefficient[0] as i32;
-        let ji = coefficient[1] as i32;
-        let ni = coefficient[2];
-        sum += ni * pi.powi(ii - 1) * f64::from(ii * ji) * (tau - 0.5).powi(ji - 1);
-    }
-    sum
+    let (tau, pi): ([f64; 43], [f64; 43]) = (
+        std::array::from_fn(|x| (tau - 0.5).powi(REGION_2_COEFFS_JI_RES[x] - 1)),
+        std::array::from_fn(|x| pi.powi(REGION_2_COEFFS_II_RES[x] - 1)),
+    );
+    let ii = Simd::<i32, 64>::load_or_default(&REGION_2_COEFFS_II_RES).cast::<f64>();
+    let ji = Simd::<i32, 64>::load_or_default(&REGION_2_COEFFS_JI_RES).cast::<f64>();
+    let ni = Simd::<f64, 64>::load_or_default(&REGION_2_COEFFS_NI_RES);
+    let tau = Simd::<f64, 64>::load_or_default(&tau);
+    let pi = Simd::<f64, 64>::load_or_default(&pi);
+    (ni * ii * ji * tau * pi).reduce_sum()
 }
 
 /// Returns the region-2 specific volume
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
+#[inline]
 pub(crate) fn v_tp_2(t: f64, p: f64) -> f64 {
     ((constants::_R * 1000.0) * t / p) * pi_2(p) * (gamma_pi_2_ideal(t, p) + gamma_pi_2_res(t, p))
 }
@@ -231,6 +305,7 @@ pub(crate) fn v_tp_2(t: f64, p: f64) -> f64 {
 /// Returns the region-2 enthalpy
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
+#[inline]
 pub(crate) fn h_tp_2(t: f64, p: f64) -> f64 {
     constants::_R * t * tau_2(t) * (gamma_tau_2_ideal(t, p) + gamma_tau_2_res(t, p))
 }
@@ -238,6 +313,7 @@ pub(crate) fn h_tp_2(t: f64, p: f64) -> f64 {
 /// Returns the region-2 internal energy
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
+#[inline]
 pub(crate) fn u_tp_2(t: f64, p: f64) -> f64 {
     let tau = tau_2(t);
     let pi = pi_2(p);
@@ -259,6 +335,7 @@ pub(crate) fn s_tp_2(t: f64, p: f64) -> f64 {
 /// Returns the region-2 isobaric specific heat
 /// Temperature is assumed to be in K
 /// Pressure is assumed to be in Pa
+#[inline]
 pub(crate) fn cp_tp_2(t: f64, p: f64) -> f64 {
     let tau = tau_2(t);
     -constants::_R * tau.powi(2) * (gamma_tau_tau_2_ideal(t, p) + gamma_tau_tau_2_res(t, p))
@@ -288,7 +365,6 @@ pub(crate) fn w_tp_2(t: f64, p: f64) -> f64 {
     ((constants::_R * 1000.0 * t) * num / den).sqrt()
 }
 
-#[allow(dead_code)]
 fn t_ps_2a(pi: f64, s: f64) -> f64 {
     let i: [f64; 46] = [
         -1.5, -1.5, -1.5, -1.5, -1.5, -1.5, -1.25, -1.25, -1.25, -1.0, -1.0, -1.0, -1.0, -1.0,
@@ -357,7 +433,6 @@ fn t_ps_2a(pi: f64, s: f64) -> f64 {
         .sum()
 }
 
-#[allow(dead_code)]
 fn t_ps_2b(pi: f64, s: f64) -> f64 {
     let i: [i32; 44] = [
         -6, -6, -5, -5, -4, -4, -4, -3, -3, -3, -3, -2, -2, -2, -2, -1, -1, -1, -1, -1, 0, 0, 0, 0,
@@ -422,7 +497,6 @@ fn t_ps_2b(pi: f64, s: f64) -> f64 {
         .sum()
 }
 
-#[allow(dead_code)]
 fn t_ps_2c(pi: f64, s: f64) -> f64 {
     let i: [i32; 30] = [
         -2, -2, -1, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 7, 7, 7, 7, 7,
@@ -473,7 +547,7 @@ fn t_ps_2c(pi: f64, s: f64) -> f64 {
 /// Returns the region-1 backward correlation for T(p,s)
 /// Entropy is assumed to be in kJ/kg.K
 /// Pressure is assumed to be in Pa
-#[allow(dead_code)]
+#[inline]
 pub fn t_ps_2(p: f64, s: f64) -> f64 {
     let pi = p / 1e6;
 
@@ -484,7 +558,6 @@ pub fn t_ps_2(p: f64, s: f64) -> f64 {
     }
 }
 
-#[allow(dead_code)]
 fn t_ph_2a(pi: f64, eta: f64) -> f64 {
     let i: [i32; 34] = [
         0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5,
@@ -538,7 +611,6 @@ fn t_ph_2a(pi: f64, eta: f64) -> f64 {
         .sum()
 }
 
-#[allow(dead_code)]
 fn t_ph_2b(pi: f64, eta: f64) -> f64 {
     let i: [i32; 38] = [
         0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4,
@@ -597,7 +669,6 @@ fn t_ph_2b(pi: f64, eta: f64) -> f64 {
         .sum()
 }
 
-#[allow(dead_code)]
 fn t_ph_2c(pi: f64, eta: f64) -> f64 {
     let i: [i32; 23] = [
         -7, -7, -6, -6, -5, -5, -2, -2, -1, -1, 0, 0, 1, 1, 2, 6, 6, 6, 6, 6, 6, 6, 6,
@@ -641,7 +712,7 @@ fn t_ph_2c(pi: f64, eta: f64) -> f64 {
 /// Returns the region-2 back calculated T(p,h)
 /// Pressure is assumed to be in Pa
 /// Enthalpy is assumed to be in kJ/kg
-#[allow(dead_code)]
+#[inline]
 pub fn t_ph_2(p: f64, h: f64) -> f64 {
     let pi = p / 1e6;
     let eta = h / 2.0e3;
