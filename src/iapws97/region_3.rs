@@ -1940,7 +1940,7 @@ fn phi_delta_3(rho: f64, t: f64) -> f64 {
     let delta = Simd::<f64, 64>::load_or_default(&delta);
     let tau = Simd::<f64, 64>::load_or_default(&tau);
 
-    (ni * ii * delta * tau).reduce_sum() + REGION_3_COEFFS_NI[0] as f64 / delta_3
+    (ni * ii * delta * tau).reduce_sum() + REGION_3_COEFFS_NI[0] / delta_3
 }
 
 /// Returns the region-3 phi_delta_delta
@@ -1960,7 +1960,7 @@ fn phi_delta_delta_3(rho: f64, t: f64) -> f64 {
     let tau = Simd::<f64, 64>::load_or_default(&tau);
 
     (ni * ii * (ii - f64x64::splat(1.0)) * delta * tau).reduce_sum()
-        - REGION_3_COEFFS_NI[0] as f64 / delta_3.powi(2)
+        - REGION_3_COEFFS_NI[0] / delta_3.powi(2)
 }
 
 /// Returns the region-3 phi_tau
