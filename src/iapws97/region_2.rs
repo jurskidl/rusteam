@@ -546,11 +546,15 @@ fn t_ph_2a(pi: f64, eta: f64) -> f64 {
         -0.62459855192507e2,
     ];
 
-    // Calculate T
-    let x: [usize; 34] = core::array::from_fn(|i| i + 1);
-    x.into_iter()
-        .map(|x| n[x - 1] * pi.powi(i[x - 1]) * (eta - 2.1).powi(j[x - 1]))
-        .sum()
+    let (eta, pi): ([f64; 34], [f64; 34]) = (
+        std::array::from_fn(|x| (eta - 2.1).powi(j[x])),
+        std::array::from_fn(|x| pi.powi(i[x])),
+    );
+    let n = Simd::<f64, 64>::load_or_default(&n);
+    let eta = Simd::<f64, 64>::load_or_default(&eta);
+    let pi = Simd::<f64, 64>::load_or_default(&pi);
+
+    (n * eta * pi).reduce_sum()
 }
 
 fn t_ph_2b(pi: f64, eta: f64) -> f64 {
@@ -603,12 +607,15 @@ fn t_ph_2b(pi: f64, eta: f64) -> f64 {
         0.86934156344163e-14,
     ];
 
-    // Calculate T
-    let x: [usize; 38] = core::array::from_fn(|i| i + 1);
+    let (eta, pi): ([f64; 38], [f64; 38]) = (
+        std::array::from_fn(|x| (eta - 2.6).powi(j[x])),
+        std::array::from_fn(|x| (pi - 2.0).powi(i[x])),
+    );
+    let n = Simd::<f64, 64>::load_or_default(&n);
+    let eta = Simd::<f64, 64>::load_or_default(&eta);
+    let pi = Simd::<f64, 64>::load_or_default(&pi);
 
-    x.into_iter()
-        .map(|x| n[x - 1] * (pi - 2.0).powi(i[x - 1]) * (eta - 2.6).powi(j[x - 1]))
-        .sum()
+    (n * eta * pi).reduce_sum()
 }
 
 fn t_ph_2c(pi: f64, eta: f64) -> f64 {
@@ -644,11 +651,15 @@ fn t_ph_2c(pi: f64, eta: f64) -> f64 {
         0.12918582991878e-2,
     ];
 
-    // Calculate T
-    let x: [usize; 23] = core::array::from_fn(|i| i + 1);
-    x.into_iter()
-        .map(|x| n[x - 1] * (pi + 25.0).powi(i[x - 1]) * (eta - 1.8).powi(j[x - 1]))
-        .sum()
+    let (eta, pi): ([f64; 23], [f64; 23]) = (
+        std::array::from_fn(|x| (eta - 1.8).powi(j[x])),
+        std::array::from_fn(|x| (pi + 25.0).powi(i[x])),
+    );
+    let n = Simd::<f64, 32>::load_or_default(&n);
+    let eta = Simd::<f64, 32>::load_or_default(&eta);
+    let pi = Simd::<f64, 32>::load_or_default(&pi);
+
+    (n * eta * pi).reduce_sum()
 }
 
 /// Returns the region-2 back calculated T(p,h)
